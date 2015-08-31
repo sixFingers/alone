@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Starfield</title>
+
+    <style>
+    html, body {
+        overflow: hidden;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    #space {
+        background-color: black;
+    }
+
+    #offscreen {
+        display: none;
+    }
+
+    #hud {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 13px;
+        color: white;
+    }
+
+    #resources {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+    }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div id="resources">asd</div>
+    </div>
+    <canvas id="offscreen" width="500" height="500"></canvas>
+    <canvas id="space" width="500" height="500"></canvas>
+    
+    <script type="text/javascript" src="bresenham.js"></script>
+    <script>
+    var canvas = document.getElementById('space'), 
+        ctx = canvas.getContext('2d');
+
+    canvas.width = document.body.clientWidth;
+    canvas.height = document.body.clientHeight;
+    
+    var offscreen = document.getElementById('offscreen'), 
+        backbuffer = offscreen.getContext('2d');
+        
+    offscreen.width = document.body.clientWidth;
+    offscreen.height = document.body.clientHeight;
+
+    function getBackBuffer(width, height) {
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        var ctx = canvas.getContext('2d');
+        console.log(canvas, ctx)
+
+        return ctx;
+    }
+
+    // Star cursor
+    backbuffer.fillStyle = '#ffffff';
+    backbuffer.fillRect(0, 0, 2, 2);
+    var starSprite = {x: 0, y: 0, width: 2, height: 2};
+
+    // Ship radius cursor
+    backbuffer.fillStyle = '#ff0000';
+    backbuffer.fillRect(2, 0, 1, 1);
+    var shipRadiusSprite = {x: 2, y: 0, width: 1, height: 1};
+
+    var stars = [], 
+        starCount = 500;
+
+    while(starCount --) {
+        var star = [
+            Math.floor(Math.random() * canvas.width),
+            Math.floor(Math.random() * canvas.height),
+        ];
+
+        stars.push(star);
+    }
+
+    function pointInCircle(px, py, cx, cy, cr) {
+        var dist = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+        var inSquare = dist <= cr * cr;
+        return inSquare;
+    }
+
+    function scrollStarField(shipRadius, dx, dy) {
+        var collisionRadius = 20;
+
+        var s = stars.length;
+        while(s --) {
+            var _star = stars[s];
+
+            ctx.drawImage(offscreen, starSprite.x, starSprite.y, starSprite.width, starSprite.height, _star[0], _star[1], 2, 2);
+
+            _star[0] -= dx;
+            _star[1] -= dy;
+            
+            if(_star[0] < 0) {
+                _star[0] += canvas.width;
+            } else if(_star[0] > canvas.width) {
+                _star[0] -= canvas.width;
+            } else if(_star[1] < 0) {
+                _star[1] += canvas.height;
+            } else if(_star[1] > canvas.height) {
+                _star[1] -= canvas.height;
+            } else if(pointInCircle(_star[0], _star[1], canvas.width / 2, canvas.height / 2, shipRadius)) {
+                var ax = dx == 0 ? 0: dx / Math.abs(dx);
+                var ay = dy == 0 ? 0: dy / Math.abs(dy);
+                
+                _star[0] += ax * canvas.width / 2;
+                _star[1] += ay * canvas.height / 2;
+                resources ++;
+            }
+        }
+    }
+
+    shipRadius = 10;
+    var shipBuffer = getBackBuffer(64, 64);
+    var ship = refreshShipTexture(shipRadius);
+    var shipPosition = {
+        x: Math.floor(canvas.width / 2) - shipRadius, 
+        y: Math.floor(canvas.height / 2) - shipRadius
+    }
+
+    function refreshShipTexture(radius) {
+        shipBuffer.clearRect(0, 0, shipBuffer.width, shipBuffer.height);
+        shipRadiusSprite.width = shipRadiusSprite.height = radius;
+
+        var points = plotCircle(radius + 1, radius - 2, radius - 2, 1), 
+            p = points.length;
+
+        while(p --) {
+            var point = points[p];
+            shipBuffer.drawImage(offscreen, shipRadiusSprite.x, shipRadiusSprite.y, shipRadiusSprite.width, shipRadiusSprite.height, point.x, point.y, shipRadiusSprite.width, shipRadiusSprite.height);
+        }
+    }
+
+    function drawShip() {
+        ctx.drawImage(shipBuffer.canvas, shipPosition.x, shipPosition.y);
+    }
+
+    var resources = 0;
+    var resourceString = document.getElementById('resources');
+
+    function refreshResourceString() {
+        resourceString.innerText = resources + ' resources';
+    }
+
+    var keys = {};
+
+    function onKeyDown() {
+        switch (event.keyCode) {
+            case 37: keys.left = true; break;
+            case 38: keys.up = true; break;
+            case 39: keys.right = true; break;
+            case 40: keys.down = true; break;
+        }
+    }
+
+    function onKeyUp() {
+        switch (event.keyCode) {
+            case 37: keys.left = false; break;
+            case 38: keys.up = false; break;
+            case 39: keys.right = false; break;
+            case 40: keys.down = false; break;
+        }
+    }
+
+    var time = 0;
+    var speed = 2;
+
+    function update(t) {
+        requestAnimationFrame(update);
+
+        var d = (t - time) / 10;
+        time = t;
+
+        var movement = Math.round(speed * d);
+        var dx = 0;
+        var dy = 0;
+
+        if(keys.left) {
+            dx = -movement;
+        }
+
+        if(keys.right) {
+            dx = movement;
+        }
+
+        if(keys.up) {
+            dy = -movement;
+        }
+
+        if(keys.down) {
+            dy = movement;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        scrollStarField(shipRadius, dx, dy);
+        drawShip();
+        refreshResourceString();
+    }
+
+    window.addEventListener('keydown', onKeyDown, false);
+    window.addEventListener('keyup', onKeyUp, false);
+    update(0);
+    </script>
+</body>
+</html>
